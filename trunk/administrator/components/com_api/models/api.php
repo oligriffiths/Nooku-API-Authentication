@@ -57,7 +57,7 @@ class ComApiModelApi extends ComDefaultModelDefault
         $url = $uri->get(KHTTPUrl::BASE);
         
         //Get the request
-        $params = array_merge(KRequest::get('request','raw'));
+        $params = array_merge(KRequest::get('get','raw'), KRequest::get('post','raw'));
 		
         //Api token MUST be excluded
         unset($params['api_token']);

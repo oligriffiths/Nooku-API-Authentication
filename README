@@ -1,0 +1,34 @@
+
+The project is still in very early alpha and not intended for production use. I would love others to review/contribute to the project.
+
+This plugin and associated component allow access to the nook API to be restricted to authenticated parties only. The package contains the following features:
+
+- Request signing using the OAuth signature method
+- Replay attack checking
+- View BREAD authorisation 
+
+* Future plans are to add component & view based authorisation
+
+Requests are signed using the following formula:
+
+$query = REQUEST_PARAMS <- sort by key, encode each value using rawurlencode()
+
+$string = HTTP_METHOD.'&'.rawurlencode(URI).'&'.rawurlencode($query);
+
+$token = rawurlencode(base64_encode(hash_hmac('sha1', $string, $secret, true)));
+
+The request must contain the following keys:
+
+api_key -< api key from the DB
+api_timestamp <- current timestamp in UTC time (requests are valid for 5 minutes)
+api_token <- token constructed above
+
+For more information on OAuth request signing see: http://oauth.net/core/1.0/
+
+The package is currently not installable and must be placed manually.
+
+If anyone wishes to contribute please contact me at oli@organic-development.com
+
+Thanks
+
+Oli Griffiths
