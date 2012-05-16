@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<install type="component" version="1.5.0" method="upgrade">
+	<name>Tokens</name>
+	<author>Oli Griffiths</author>
+	<creationDate>21/12/2011</creationDate>
+	<license>GNU/GPL</license>
+	<version>1.0</version>
+	<description>Nooku API request signing app</description>
+	<install>
+		<queries>CREATE TABLE `jos_token` (
+			`token_id` int(11) NOT NULL AUTO_INCREMENT,
+			`name` varchar(20) NOT NULL DEFAULT '',
+			`key` varchar(32) NOT NULL DEFAULT '',
+			`secret` varchar(32) NOT NULL DEFAULT '',
+			`enabled` tinyint(1) NOT NULL DEFAULT '1',
+			`ip_whitelist` text,
+			`ip_blacklist` text,
+			`browse` tinyint(1) DEFAULT '0',
+			`read` tinyint(1) DEFAULT '0',
+			`edit` tinyint(1) DEFAULT '0',
+			`add` tinyint(1) DEFAULT '0',
+			`delete` tinyint(1) DEFAULT '0',
+			PRIMARY KEY (`token_id`),
+			UNIQUE KEY `key` (`key`)
+			) ENGINE=MyISAM AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;</queries>
+	</install>
+	<installfile>install.token.php</installfile>
+	<uninstallfile>uninstall.token.php</uninstallfile>
+	
+	<files folder="components/com_token">
+		<filename>index.html</filename>
+	</files>
+	<languages folder="language/en-GB">
+		<language tag="en-GB">en-GB.com_token.ini</language>
+	</languages>
+	
+	<administration>
+		<menu task="default" img="js/ThemeOffice/component.png">token</menu>
+		<submenu></submenu>
+		<files>
+			<filename>token.xml</filename>
+		</files>
+		<files folder="administrator/components/com_token">
+			<filename>config.xml</filename>
+			<filename>index.html</filename>
+			<filename>install.token.php</filename>
+			<filename>token.php</filename>
+			<filename>uninstall.token.php</filename>
+			<folder>databases</folder>
+			<folder>models</folder>
+			<folder>views</folder>
+		</files>
+		<languages folder="administrator/language/en-GB">
+			<language tag="en-GB">en-GB.com_token.menu.ini</language>
+			<language tag="en-GB">en-GB.com_token.ini</language>
+		</languages>
+	</administration>
+</install>

@@ -1,16 +1,17 @@
 <?php 
 
-class ComApiDatabaseRowApi extends KDatabaseRowDefault{
+class ComTokensDatabaseRowToken extends KDatabaseRowDefault{
 	
 	/**
 	 * Overridden save function to generate the key and secret
 	 */
 	public function save(){
-		
+		//Generate the key
 		if(strlen($this->get('key')) != 32){
 			$this->set('key', $this->generateKey(true));
 		}
 
+		//Generate the secret
 		if(strlen($this->get('secret')) != 32 || $this->get('generate_secret')){
 			$this->set('secret', $this->generateKey());
 		}

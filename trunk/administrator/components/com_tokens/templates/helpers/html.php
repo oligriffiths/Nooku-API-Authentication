@@ -17,7 +17,7 @@
  * @package		Template
  * @subpackage	Helper
  */
-class ComApiTemplateHelperHtml extends KTemplateHelperDefault
+class ComTokensTemplateHelperHtml extends KTemplateHelperDefault
 {
 	
 	public function link($config = array()){
