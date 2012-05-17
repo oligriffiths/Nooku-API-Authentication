@@ -3,6 +3,9 @@
 class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 {
 	protected $headers = array();
+	public $key;
+	public $timestamp;
+	public $token;
 	
 	public function __construct(KConfig $config){
 		parent::__construct($config);
@@ -20,10 +23,13 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 			}
 		}
 		
-		//Set the key and token from request array
-		$this->model->getState()
-			->insert('key','string', $this->getVar('key','string'), true)
-			->insert('token','string', $this->getVar('token'));		
+		//Get the reqired params
+		$this->key = $this->getVar('key','string');
+		$this->timestamp = $this->getVar('timestamp','string');
+		$this->token = $this->getVar('token','string');
+		
+		//Set the key in the model
+		$this->model->getState()->insert('key','string', $this->key, true);		
 	}
 	
 	
@@ -70,21 +76,21 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 		if($authenticated !== null && $this->model->key) return $authenticated;
 		
 		//Check we have a key
-		if(!$this->model->key){
+		if(!$this->key){
 			$authenticated = false;
         	throw new ComTokensException('No API key supplied', KHttpResponse::FORBIDDEN);
 			return $authenticated;
 		}
 	
 		//Check we have a token
-        if(!$this->model->token){
+        if(!$this->token){
         	$authenticated = false;
         	throw new ComTokensException('No API token supplied', KHttpResponse::FORBIDDEN);
         	return false;
         }
         		        
 		//Get the item
-        $this->item = $this->model->set('id', null)->set('enabled', true)->getItem();
+        $this->item = $this->model->set('id', null)->set('enabled', true)->set('key', $this->key)->getItem();
         
         //Check we have an access record
         if(!$this->item->get('id')){
@@ -164,18 +170,17 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         unset($params['api_token']);
         
 		//Check timestamp presence
-		$timestamp = $this->getVar('timestamp');
-		if(!$timestamp){
+		if(!$this->timestamp){
 			throw new ComTokensException('No API timestamp given', KHttpResponse::FORBIDDEN);
 		}
 
 		//Check timestamp validity
-		if($timestamp < time() - 60){
+		if($this->timestamp < time() - 60){
 			throw new ComTokensException('API timestamp out of date. Ensure you are using UTC time', KHttpResponse::FORBIDDEN);
 		}
 		
 		//Set timestamp in query
-		$params['api_timestamp'] = $timestamp;
+		$params['api_timestamp'] = $this->timestamp;
 		
 		//Sort and encode the params
 		$params = $this->prepareParams($params);
@@ -187,7 +192,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         $token = rawurlencode(base64_encode(hash_hmac('sha1', $token_string, $this->item->get('secret'), true)));
         
         //Check if the generated token matches the supplied token
-        $authenticated = $token == rawurlencode($this->model->get('token'));
+        $authenticated = $token == rawurlencode($this->token);
         
         //If authenticated, Force the token
         if($authenticated){

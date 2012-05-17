@@ -106,9 +106,6 @@ class NookuRequest
 		//Prepare the url for encoding etc
 		$uri = $this->prepareURI($this->uri, $query);
 
-		//Prepare the data for encoding
-		$data = $this->encodeParams($data);
-
 		//Generate the request token
 		$token = $this->generateToken($method, $uri['uri'], $uri['query'], $data);
 		
@@ -160,7 +157,7 @@ class NookuRequest
 
 		//Encode the token string
 		$token = rawurlencode(base64_encode(hash_hmac('sha1', $token_string, $this->secret, true)));
-
+		
 		return $token;
 	}
 
