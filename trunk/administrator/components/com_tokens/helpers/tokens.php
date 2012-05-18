@@ -11,7 +11,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 		parent::__construct($config);
 		
 		//Get the model
-		$this->model = $this->getService('com://site/tokens.model.tokens');
+		$this->model = $this->getService('com://admin/tokens.model.tokens');
 		
 		//Get the token from the headers first
 		$header = KRequest::get('server.HTTP_KOOWA_TOKEN','string');
@@ -29,7 +29,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 		$this->token = $this->getVar('token','string');
 		
 		//Set the key in the model
-		$this->model->getState()->insert('key','string', $this->key, true);		
+		$this->model->getState()->insert('key','string', $this->key, true);	
 	}
 	
 	
@@ -78,14 +78,14 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 		//Check we have a key
 		if(!$this->key){
 			$authenticated = false;
-        	throw new ComTokensException('No API key supplied', KHttpResponse::FORBIDDEN);
+        	throw new ComTokensControllerException('No API key supplied', KHttpResponse::FORBIDDEN);
 			return $authenticated;
 		}
 	
 		//Check we have a token
         if(!$this->token){
         	$authenticated = false;
-        	throw new ComTokensException('No API token supplied', KHttpResponse::FORBIDDEN);
+        	throw new ComTokensControllerException('No API token supplied', KHttpResponse::FORBIDDEN);
         	return false;
         }
         		        
@@ -95,13 +95,13 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         //Check we have an access record
         if(!$this->item->get('id')){
         	$authenticated = false;
-        	throw new ComTokensException('No API account found for the supplied API key', KHttpResponse::FORBIDDEN);
+        	throw new ComTokensControllerException('No API account found for the supplied API key', KHttpResponse::FORBIDDEN);
         	return false;
         }
         
         if(!$this->item->enabled){
         	$authenticated = false;
-        	throw new ComTokensException('API account disabled', KHttpResponse::FORBIDDEN);
+        	throw new ComTokensControllerException('API account disabled', KHttpResponse::FORBIDDEN);
         	return false;
         }   
 
@@ -123,7 +123,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         		//Check if we're rate limiting
         		if($this->item->requests_max && $this->item->requests_in_last_hour > $this->item->requests_max){
         			$authenticated = false;
-        			throw new ComTokensException('You have exceed the maximum ('.$this->item->requests_max.') requests permitted within 1 hour. Please wait until the next hour.', KHttpResponse::FORBIDDEN);
+        			throw new ComTokensControllerException('You have exceed the maximum ('.$this->item->requests_max.') requests permitted within 1 hour. Please wait until the next hour.', KHttpResponse::FORBIDDEN);
         			return false;
         		}	
         	}else{
@@ -140,7 +140,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         if($ip_blacklist = $this->item->get('ip_blacklist')){
         	$ip_blacklist = explode("\n", $ip_blacklist);
         	if($this->isIpMatch($ip_blacklist, $ip)){
-        		throw new ComTokensException('Your IP has been blacklisted', KHttpResponse::FORBIDDEN);
+        		throw new ComTokensControllerException('Your IP has been blacklisted', KHttpResponse::FORBIDDEN);
         	}
         }
         
@@ -148,7 +148,7 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         if($ip_whitelist = $this->item->get('ip_whitelist')){
         	$ip_whitelist = explode("\n", $ip_whitelist);
         	if(!$this->isIpMatch($ip_whitelist, $ip)){
-        		throw new ComTokensException('Your IP is not whitelisted', KHttpResponse::FORBIDDEN);
+        		throw new ComTokensControllerException('Your IP is not whitelisted', KHttpResponse::FORBIDDEN);
         	}
         } 
         
@@ -161,47 +161,70 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         $url = $uri->get(KHTTPUrl::BASE);
         
         //We get the questrgin from the server var so we know it hasnt altered elsewhere
-        parse_str(KRequest::get('server.QUERY_STRING','string'), $querstring);
+        parse_str(KRequest::get('server.QUERY_STRING','string'), $params);
         
-        //Get the request
-        $params = array_merge($querstring,KRequest::get('post','raw'));
+        //Merge in the request data for post/put requests
+        if(KRequest::method() == 'PUT' || KRequest::method() == 'POST') $params = array_merge($params,KRequest::get(strtolower(KRequest::method()),'raw'));
 		
         //Api token MUST be excluded
         unset($params['api_token']);
         
 		//Check timestamp presence
 		if(!$this->timestamp){
-			throw new ComTokensException('No API timestamp given', KHttpResponse::FORBIDDEN);
+			throw new ComTokensControllerException('No API timestamp given', KHttpResponse::FORBIDDEN);
 		}
 
 		//Check timestamp validity
-		if($this->timestamp < time() - 60){
-			throw new ComTokensException('API timestamp out of date. Ensure you are using UTC time', KHttpResponse::FORBIDDEN);
+		if($this->timestamp < time() - 60 && 0){
+			throw new ComTokensControllerException('API timestamp out of date. Ensure you are using UTC time', KHttpResponse::FORBIDDEN);
 		}
 		
 		//Set timestamp in query
 		$params['api_timestamp'] = $this->timestamp;
 		
-		//Sort and encode the params
-		$params = $this->prepareParams($params);
+		//Sort and encode the params and generate querystring
+		$query = $this->build_http_query($params);
 		
         //Generate the token string
-        $token_string = KRequest::method().'&'.rawurlencode($url).'&'.rawurlencode(http_build_query($params, '', '&'));
+        $token_string = KRequest::method().'&'.rawurlencode($url).'&'.rawurlencode($query);
         
         //Token is encoded using SHA1, then base64 encoded, then urlencoded
         $token = rawurlencode(base64_encode(hash_hmac('sha1', $token_string, $this->item->get('secret'), true)));
         
         //Check if the generated token matches the supplied token
         $authenticated = $token == rawurlencode($this->token);
-        
+           
         //If authenticated, Force the token
         if($authenticated){
         	KRequest::set('request._token', JUtility::getToken());
         }else{
-        	throw new ComTokensException('API token check failed. Check consumer secret.', KHttpResponse::FORBIDDEN);
+        	throw new ComTokensControllerException('API token check failed. Check consumer secret.', KHttpResponse::FORBIDDEN);
         }
 
         return $authenticated;
+	}
+	
+	
+	/**
+	 * Builds and HTTP query and urlencodes the keys and values
+	 * @param array $params
+	 * @param string $key
+	 */
+	protected function build_http_query(array $params, $key = '')
+	{
+		ksort($params);
+		
+		//DO an index check to see if array is associative
+		$isIndexed = array_values($params) === $params;
+		
+		$query = array();
+		foreach($params AS $k => $v){
+			$k = rawurlencode($k);
+			if(is_array($v)) $query[] = $this->build_http_query($v, $k);
+			else $query[] = ($key ? $key.'['.($isIndexed ? '' : $k).']' : $k).'='.rawurlencode($v);
+		}
+	
+		return implode('&', $query);
 	}
 	
 	

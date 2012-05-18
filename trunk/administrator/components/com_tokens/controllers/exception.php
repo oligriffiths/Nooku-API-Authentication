@@ -2,7 +2,7 @@
 /**
  * API Exception Class
  */
-class ComTokensException extends KException
+class ComTokensControllerException extends KControllerException
 {
     /**
      * Format the exception for display

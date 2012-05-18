@@ -31,11 +31,10 @@ class plgSystemKoowa_Tokens extends JPlugin{
 	 */
 	public function onAfterInitialise()
 	{ 
-		require_once dirname(__FILE__).'/koowa_tokens/behaviors/executable.php';
-		require_once dirname(__FILE__).'/koowa_tokens/exceptions/exception.php';
+		require_once dirname(__FILE__).'/../../administrator/components/com_tokens/controllers/behaviors/executable.php';
 
 		//Get the token helper
-		$tokens = KService::get('com://site/tokens.helper.tokens');
+		$tokens = KService::get('com://admin/tokens.helper.tokens');
 		
 		//If no key was supplied return here
 		if(!$tokens->key) return;
@@ -58,8 +57,11 @@ class plgSystemKoowa_Tokens extends JPlugin{
 		//Change the Joomla error handler to our own local handler and call it
 		JError::setErrorHandling( E_ERROR, 'callback', array($this,'errorHandler'));
 		
+		//Set message
+		$message = $exception instanceof ComTokensControllerException || JDEBUG ? $exception->getMessage() : null;
+		
 		//Make sure we have a valid status code
-		JError::raiseError(KHttpResponse::isError($exception->getCode()) ? $exception->getCode() : 500, $exception->getMessage());
+		JError::raiseError(KHttpResponse::isError($exception->getCode()) ? $exception->getCode() : 500, $message);
 	}
 	
 	
@@ -95,11 +97,7 @@ class plgSystemKoowa_Tokens extends JPlugin{
 		while(@ob_get_clean());
 				
 		//Throw json formatted error
-		$content = KRequest::content('type');
-		$accept = KRequest::accept('format');
-		$json = isset($accept['application/json']) && $accept['application/json'];
-		
-		if(	KRequest::get('request.format', 'cmd') == 'json' || $content == 'application/json' || $json){
+		if(	KRequest::format() == 'json' ){
 			$app =& JFactory::getApplication();		
 
 			//Get the public properties

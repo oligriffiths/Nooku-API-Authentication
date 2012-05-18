@@ -1,21 +1,11 @@
 <?php
 /**
- * @version     $Id: executable.php 4350 2011-10-30 14:40:16Z johanjanssens $
- * @category	Nooku
- * @package     Nooku_Components
- * @subpackage  Default
- * @copyright   Copyright (C) 2007 - 2010 Johan Janssens. All rights reserved.
- * @license     GNU GPLv3 <http://www.gnu.org/licenses/gpl.html>
- * @link        http://www.nooku.org
- */
-
-/**
- * Default Controller Authorization Command
+ * Tokens Controller Executable Command
 .*
- * @author      Johan Janssens <johan@nooku.org>
+ * @author      Oli Griffiths <oli@organic-development.com>
  * @category    Nooku
- * @package     Nooku_Components
- * @subpackage  Default
+ * @package     Nooku_Server
+ * @subpackage  Tokens
  */
 class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutable
 { 
@@ -56,7 +46,7 @@ class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutab
      */
     public function canBrowse()
     {
-        $auth = $this->getService('com://site/tokens.helper.tokens')->authorize($this->action);
+        $auth = $this->getService('com://admin/tokens.helper.tokens')->authorize($this->action);
 		return $auth === null ? true : $auth;
     }
     
@@ -67,7 +57,7 @@ class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutab
      */
     public function canRead()
     {
-        $auth = $this->getService('com://site/tokens.helper.tokens')->authorize($this->action);
+        $auth = $this->getService('com://admin/tokens.helper.tokens')->authorize($this->action);
 		return $auth === null ? true : $auth;
     }
     
@@ -89,7 +79,7 @@ class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutab
                 $result = JFactory::getUser()->get('gid') > ($isAdmin ? 22 : 18);
             }
 			
-			if($this->getService('com://site/tokens.helper.tokens')->authorize($this->action) === false){
+			if($this->getService('com://admin/tokens.helper.tokens')->authorize($this->action) === false){
         		$result = false;
         	}
         }
@@ -115,7 +105,7 @@ class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutab
                 $result = JFactory::getUser()->get('gid') > ($isAdmin ? 22 : 19);
             }
 			
-			if($this->getService('com://site/tokens.helper.tokens')->authorize($this->action) === false){
+			if($this->getService('com://admin/tokens.helper.tokens')->authorize($this->action) === false){
         		$result = false;
         	}
         }
@@ -141,7 +131,7 @@ class ComDefaultControllerBehaviorExecutable extends KControllerBehaviorExecutab
                 $result = JFactory::getUser()->get('gid') > ($isAdmin ? 22 : 20);
             }
 			
-			if($this->getService('com://site/tokens.helper.tokens')->authorize($this->action) === false){
+			if($this->getService('com://admin/tokens.helper.tokens')->authorize($this->action) === false){
         		$result = false;
         	}
         }
