@@ -29,9 +29,18 @@ class plgSystemKoowa_Tokens extends JPlugin{
 	 * 
 	 * @return void
 	 */
-	public function onAfterInitialise()
+	public function onAfterRoute()
 	{ 
-		require_once dirname(__FILE__).'/../../administrator/components/com_tokens/controllers/behaviors/executable.php';
+		$app =& JFactory::getApplication();
+		$option = preg_replace('/^com_/','',KRequest::get('request.option','string'));
+		$name = KInflector::singularize(KRequest::get('request.view','string'));
+		
+		$controller = 'com://'.($app->isSite() ? 'site' : 'admin').'/'.$option.'.controller.'.$name;
+		$dispatcher = 'com://'.($app->isSite() ? 'site' : 'admin').'/'.$option.'.dispatcher';
+		
+		//Set the config for the controller and dispatcher  to load in the tokenable and respondable behaviors
+		KService::setConfig($controller, array('behaviors' => array('com://admin/tokens.controller.behavior.tokenable')));
+		KService::setConfig($dispatcher, array('behaviors' => array('com://admin/tokens.controller.behavior.respondable')));
 
 		//Get the token helper
 		$tokens = KService::get('com://admin/tokens.helper.tokens');

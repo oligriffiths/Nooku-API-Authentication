@@ -2,16 +2,20 @@
 
 class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 {
+	protected $model;
 	protected $headers = array();
 	public $key;
 	public $timestamp;
 	public $token;
 	
+	
+	/**
+	 * Constructor attempts to extract the AUTH info from an HTTP header KOOWA_TOKEN
+	 * Falls back to the request data
+	 * @param KConfig $config
+	 */
 	public function __construct(KConfig $config){
 		parent::__construct($config);
-		
-		//Get the model
-		$this->model = $this->getService('com://admin/tokens.model.tokens');
 		
 		//Get the token from the headers first
 		$header = KRequest::get('server.HTTP_KOOWA_TOKEN','string');
@@ -27,9 +31,6 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 		$this->key = $this->getVar('key','string');
 		$this->timestamp = $this->getVar('timestamp','string');
 		$this->token = $this->getVar('token','string');
-		
-		//Set the key in the model
-		$this->model->getState()->insert('key','string', $this->key, true);	
 	}
 	
 	
@@ -65,9 +66,8 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 	/**
 	 * Main authenticate method.
 	 * Check there is an AIP record for the supplied key
-	 * Then verifies the supplied data is correct:
-	 * This is done by constructing a string using the request method, uri and parameters
-	 * See http://oauth.net/core/1.0/#sig_base_example for example url structure (note: this is not oauth, just the same algorithm)
+	 * Check rate limiting, timestamp, IP
+	 * Finally validate token and set request _token
 	 */
 	public function authenticate(){
 		static $authenticated = null;
@@ -88,10 +88,10 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         	throw new ComTokensControllerException('No API token supplied', KHttpResponse::FORBIDDEN);
         	return false;
         }
-        		        
+
 		//Get the item
-        $this->item = $this->model->set('id', null)->set('enabled', true)->set('key', $this->key)->getItem();
-        
+        $this->item = $this->getApiToken();
+
         //Check we have an access record
         if(!$this->item->get('id')){
         	$authenticated = false;
@@ -99,12 +99,6 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         	return false;
         }
         
-        if(!$this->item->enabled){
-        	$authenticated = false;
-        	throw new ComTokensControllerException('API account disabled', KHttpResponse::FORBIDDEN);
-        	return false;
-        }   
-
         //Store the last request time
         $last_request = date('Y-m-d H', strtotime($this->item->last_request));
         
@@ -132,6 +126,22 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         	}
         }
         
+        //Check account is enabled
+        if(!$this->item->enabled){
+        	$authenticated = false;
+        	throw new ComTokensControllerException('API account disabled', KHttpResponse::FORBIDDEN);
+        	return false;
+        }
+        
+        //Check timestamp presence
+        if(!$this->timestamp){
+        	throw new ComTokensControllerException('No API timestamp given', KHttpResponse::FORBIDDEN);
+        }
+        
+        //Check timestamp validity
+        if($this->timestamp < time() - 60 && 0){
+        	throw new ComTokensControllerException('API timestamp out of date. Ensure you are using UTC time', KHttpResponse::FORBIDDEN);
+        }
         
         //Get the users IP
         $ip = KRequest::get('server.REMOTE_ADDR','string');
@@ -151,48 +161,9 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         		throw new ComTokensControllerException('Your IP is not whitelisted', KHttpResponse::FORBIDDEN);
         	}
         } 
-        
-        
-        /**
-         * Below we attempt to re-create the api token
-         */        
-        //Get the request url
-        $uri = KRequest::url();
-        $url = $uri->get(KHTTPUrl::BASE);
-        
-        //We get the questrgin from the server var so we know it hasnt altered elsewhere
-        parse_str(KRequest::get('server.QUERY_STRING','string'), $params);
-        
-        //Merge in the request data for post/put requests
-        if(KRequest::method() == 'PUT' || KRequest::method() == 'POST') $params = array_merge($params,KRequest::get(strtolower(KRequest::method()),'raw'));
-		
-        //Api token MUST be excluded
-        unset($params['api_token']);
-        
-		//Check timestamp presence
-		if(!$this->timestamp){
-			throw new ComTokensControllerException('No API timestamp given', KHttpResponse::FORBIDDEN);
-		}
-
-		//Check timestamp validity
-		if($this->timestamp < time() - 60 && 0){
-			throw new ComTokensControllerException('API timestamp out of date. Ensure you are using UTC time', KHttpResponse::FORBIDDEN);
-		}
-		
-		//Set timestamp in query
-		$params['api_timestamp'] = $this->timestamp;
-		
-		//Sort and encode the params and generate querystring
-		$query = $this->build_http_query($params);
-		
-        //Generate the token string
-        $token_string = KRequest::method().'&'.rawurlencode($url).'&'.rawurlencode($query);
-        
-        //Token is encoded using SHA1, then base64 encoded, then urlencoded
-        $token = rawurlencode(base64_encode(hash_hmac('sha1', $token_string, $this->item->get('secret'), true)));
-        
-        //Check if the generated token matches the supplied token
-        $authenticated = $token == rawurlencode($this->token);
+       
+        //Check the token
+        $authenticated = $this->validateToken();
            
         //If authenticated, Force the token
         if($authenticated){
@@ -201,7 +172,102 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         	throw new ComTokensControllerException('API token check failed. Check consumer secret.', KHttpResponse::FORBIDDEN);
         }
 
-        return $authenticated;
+        return (bool) $authenticated;
+	}
+	
+	/**
+	 * Authorize the request action (BREAD)
+	 * @return boolean
+	 */
+	public function authorize($action){
+		//Ensure action is set
+		if(!$action) return null;
+		
+		//If no key supplied, return true
+		if(!$this->key) return null;
+	
+		//Check if we're authenticated
+		if(!$this->authenticate()) return false;
+	
+		//Check if the action is 1
+		return (bool) $this->item->get($action);
+	}
+	
+	
+	/**
+	 * Retrieves an API token record from the database
+	 * @return KDababaseRow
+	 */
+	public function getApiToken(){
+		if(!$this->model){
+			//Get the model
+			$this->model = $this->getService('com://admin/tokens.model.tokens');
+			
+			//Set the key in the model
+			$this->model->getState()->insert('key','string', $this->key, true);
+		}
+		
+		return $this->model->set('id', null)->set('enabled', true)->set('key', $this->key)->getItem();
+	}
+	
+	
+	/**
+	 * Validates the token supplied matches the server generated token
+	 * Then verifies the supplied data is correct:
+	 * This is done by constructing a string using the request method, uri and parameters
+	 * See http://oauth.net/core/1.0/#sig_base_example for example url structure (note: this is not oauth, just the same algorithm)
+	 * @return boolean
+	 */
+	public function validateToken()
+	{
+		//Generate token string
+		$token_string = $this->generateSignatureBaseString();
+		
+		//Token is encoded using SHA1, then base64 encoded, then urlencoded
+		$token = rawurlencode(base64_encode(hash_hmac('sha1', $token_string, $this->item->get('secret'), true)));
+		
+		//Check if the generated token matches the supplied token
+		return (bool) $token == rawurlencode($this->token);
+	}
+	
+	
+	/**
+	 * Generates the base string used for the signature above
+	 * @return string
+	 */
+	protected function generateSignatureBaseString()
+	{	
+		//Get the request url
+		$uri = KRequest::url();
+		$url = $uri->get(KHTTPUrl::BASE);
+		
+		//We get the questrgin from the server var so we know it hasnt altered elsewhere
+		parse_str(KRequest::get('server.QUERY_STRING','string'), $params);
+		
+		//Merge in the request data for post/put requests
+		if(KRequest::method() == 'PUT' || KRequest::method() == 'POST') $params = array_merge($params,KRequest::get(strtolower(KRequest::method()),'raw'));
+		
+		//Api token MUST be excluded
+		unset($params['api_token']);
+		
+		
+		//Set timestamp in query
+		$params['api_timestamp'] = $this->timestamp;
+		
+		//Sort and encode the params and generate querystring
+		$query = $this->build_http_query($params);
+		
+		//Generate the token string
+		$token_string = KRequest::method().'&'.rawurlencode($url).'&'.rawurlencode($query);
+		
+		//Set timestamp in query
+		$params['api_timestamp'] = $this->timestamp;
+		
+		//Sort and encode the params and generate querystring
+		$query = $this->build_http_query($params);
+		
+		//Generate the token string
+		return KRequest::method().'&'.rawurlencode($url).'&'.rawurlencode($query);
 	}
 	
 	
@@ -213,10 +279,10 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
 	protected function build_http_query(array $params, $key = '')
 	{
 		ksort($params);
-		
+	
 		//DO an index check to see if array is associative
 		$isIndexed = array_values($params) === $params;
-		
+	
 		$query = array();
 		foreach($params AS $k => $v){
 			$k = rawurlencode($k);
@@ -246,36 +312,5 @@ class ComTokensHelperTokens extends KObject implements KServiceInstantiatable
         	if($ip == $ip_addr) return true;
         }
         return false;
-	}
-	
-	/**
-	 * Authorize the request action
-	 */
-	public function authorize($action){
-		
-		//If no key supplied, return true
-		if(!$this->model->get('key')) return null;
-		
-		//Check if we're authenticated
-		if(!$this->authenticate()) return false;
-		
-		//Check if the action is 1
-		return $this->item->get($action);
-	}
-	
-	/**
-	 * Sort the parameters and urlencode the keys and values
-	 */
-	protected function prepareParams($array){
-		
-		$return = array();
-		foreach($array AS $key => $value){
-			$key = rawurlencode($key);
-			if(is_array($value)) $return[$key] = $this->prepareParams($value);
-			else $return[$key] = rawurlencode($value);			
-		}	
-
-		ksort($return);
-		return $return;
 	}
 }
